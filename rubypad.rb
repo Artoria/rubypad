@@ -24,13 +24,49 @@ class RubyPad
     else
       "ruby" 
     end
-    system "#{cmd} #@filename"    
+    rs = "END { open('1.sig', 'wb') do |f| f.write Marshal.dump $LOADED_FEATURES end } \n\#RUBYPAD\n#{x}"
+    open("#@filename", "w") do |f| f.write rs end
+    system "#{cmd} #@filename"
+    open("#@filename", "w") do |f| f.write x end
+    r = predefined
+    u = r.concat(open("1.sig", "rb") do |f| Marshal.load(f) end.select{|f| FileTest.exists? f})
+    if u != @u
+      puts "changed"
+      puts "new: #{u - (@u || [])}"
+      puts "removed: #{(@u ||[]) - u}"
+      @u = u
+      @v = u.map{|f| File.mtime f}
+    end
+    @v[0, r.length] = @u[0, r.length].map(&File.method(:mtime))
+  end
+
+  def predefined
+     [@filename, __FILE__]
+  end
+
+  def dep_changed?
+    if @u
+      v = @u.map{|f| File.mtime f}
+      if @v != v
+        v.length.times{|i|
+          if @v[i] != v[i] 
+             puts "#{@u[i]} modified"
+          end
+        }        
+        
+        @v = v
+        return true
+      end
+      false
+    else
+      true
+    end
   end
 
   def run
     while true
       sleep 0.1
-      if @mtime != File.mtime(@filename)
+      if dep_changed?
         @mtime = File.mtime @filename
         puts "##{@piece += 1}"
         runfile
